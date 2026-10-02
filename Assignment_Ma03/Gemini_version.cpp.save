@@ -1,0 +1,324 @@
+//Description:
+//This program prioritzes emails for a ceo using a list_based Maxheap
+//
+// input emailnext read and count commands
+// output: displays prioritized emails and the number of unread emails
+//
+//collaborators:chatgpt about the explain some part of the code functions
+//other reources google gemini aws used to generated the intial version of the rogram
+//the final program was bebugged by myslef
+//revision:
+// corrected the output form for the NEXTS and COUT and
+//improved the comment
+//
+//Author:yunjingma
+//creation date :september 30th
+//revision date september 30th and October 1st
+//
+//and ask for the Cpp vocabulary and conecpt
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <cstdlib>
+
+// ---------------------------------------------------------------- Date
+//source:gemini generated code
+//modification: yunjing ma
+// this part of the class stores an email date and converts the dat einto a numerical
+//and the value so that dates can be compared
+class DateKey {
+private: // sotre the numberical date
+    int dateValue;
+    std::string rawDate;// sotre the string of the date
+
+    int parseKey(const std::string& d) const {  // converts the mm dd yyyy formate into YYYYMMDD
+        if (d.length() < 10) return 0;//check if the date contains enough character
+        int mm = std::atoi(d.substr(0, 2).c_str()); // extract the month day and the year
+        int dd = std::atoi(d.substr(3, 2).c_str());
+        int yy = std::atoi(d.substr(6, 4).c_str());
+        return yy * 10000 + mm * 100 + dd;// combine the year month and day into one interger
+    }
+
+public://create the datakey with no date
+    DateKey() : dateValue(0), rawDate("") {}
+ // Creates a DateKey object using the provided date string.
+    explicit DateKey(const std::string& d) : rawDate(d), dateValue(parseKey(d)) {}
+    // Returns the numerical value and the string  of the date
+    int getValue() const { return dateValue; }
+    std::string toString() const { return rawDate; }
+
+    bool operator>(const DateKey& other) const {
+        return dateValue > other.dateValue;
+    }
+};
+
+// ---------------------------------------------------------------- Priority
+// this part of the class are convert the catogory to the value for easier compared the prioity
+
+class PriorityRank {
+private:
+    int rank;
+// set the priority based on the sender category the mor eimportant the value higher
+    int evaluateRank(const std::string& cat) const {
+        if (cat == "Boss")              return 5;
+        if (cat == "Subordinate")       return 4;
+        if (cat == "Peer")              return 3;
+        if (cat == "ImportantPerson")   return 2;
+        return 1; // OtherPerson
+    }
+
+public:// first create the priority with set as 1 the lowest as the importantperson
+    PriorityRank() : rank(1) {}
+    explicit PriorityRank(const std::string& cat) : rank(evaluateRank(cat)) {}// try not to convert automaticly
+
+    int getRank() const { return rank; }//return the priority rank
+
+    bool operator>(const PriorityRank& other) const { //make the boolean if this email have higher priroity rank
+        return rank > other.rank;
+    }
+    bool operator==(const PriorityRank& other) const {//if it's equal
+        return rank == other.rank;
+    }
+};
+
+// ---------------------------------------------------------------- Email
+//this class represents one email and stores its sender subject date prioty and the arrical order
+class Email {
+private:
+    std::string senderCategory;//sender
+    std::string subjectLine;//string subjectline
+    DateKey date;// import the datekey class and get the numerical data
+    PriorityRank priority;//import the class of the priroity to get the interger of the prioity
+    long arrivalSequence;// stores the order in which the email arrive
+
+public:
+    Email() : arrivalSequence(0) {}// create the empty email ojbject
+
+    Email(const std::string& sender, const std::string& subject,// creates the email object suing the provided information
+          const std::string& dateStr, long sequence)
+        : senderCategory(sender),
+          subjectLine(subject),
+          date(dateStr),
+          priority(sender),
+          arrivalSequence(sequence) {}
+
+    bool hasHigherPriorityThan(const Email& other) const {  // compare the prioeity of the sender first
+        if (!(priority == other.priority)) {
+            return priority > other.priority;
+        }
+        if (date.getValue() != other.date.getValue()) {
+            return date > other.date; // Newest first for same category
+        }
+        return arrivalSequence < other.arrivalSequence; // Stable tie-breaker
+    }
+
+    void display() const {
+        std::cout << "Sender: "  << senderCategory  << "\n"
+                  << "Subject: " << subjectLine     << "\n"
+                  << "Date: "    << date.toString() << "\n";
+    }
+};// display the information
+
+// -------------------------------------------------------------- MaxHeap
+class MaxHeap {
+private:
+    Email* heapArray;// set the pointer
+    int capacity;// maximunnumber of capacity
+    int count;// set the count
+
+    int getParentIndex(int i) const { return (i - 1) / 2; }// set the parent index
+    int getLeftIndex(int i)   const { return 2 * i + 1; }//set the left children index
+    int getRightIndex(int i)  const { return 2 * i + 2; }//set the right children index
+
+    void swapElements(int a, int b) {//swap the children and the parent index function
+        Email temp = heapArray[a];
+        heapArray[a] = heapArray[b];
+        heapArray[b] = temp;
+    }
+
+    void resize() {//change the capacity of the email storage
+        int newCapacity = capacity * 2;//double the storeage size
+        Email* newArray = new Email[newCapacity];
+        for (int i = 0; i < count; i++) {// view the orignal aray one by one
+            newArray[i] = heapArray[i];//move to the new array
+        }
+        delete[] heapArray;//delete the former array
+        heapArray = newArray;
+        capacity = newCapacity;
+    }
+
+    void siftUp(int i) {
+        while (i > 0 && heapArray[i].hasHigherPriorityThan(heapArray[getParentIndex(i)])) {
+            swapElements(i, getParentIndex(i));
+            i = getParentIndex(i);
+        }
+    }
+
+    void siftDown(int i) {
+        while (true) {
+            int bestIndex = i;
+            int left = getLeftIndex(i);
+            int right = getRightIndex(i);
+
+            if (left < count && heapArray[left].hasHigherPriorityThan(heapArray[bestIndex])) {
+                bestIndex = left;
+            }
+            if (right < count && heapArray[right].hasHigherPriorityThan(heapArray[bestIndex])) {
+                bestIndex = right;
+            }
+            if (bestIndex == i) break;
+
+            swapElements(i, bestIndex);
+            i = bestIndex;
+        }
+    }
+
+public:
+    MaxHeap() : heapArray(new Email[16]), capacity(16), count(0) {}
+    ~MaxHeap() { delete[] heapArray; }
+
+    MaxHeap(const MaxHeap&) = delete;
+    MaxHeap& operator=(const MaxHeap&) = delete;
+
+    void insert(const Email& email) {
+        if (count == capacity) {
+            resize();
+        }
+        heapArray[count] = email;
+        siftUp(count);
+        count++;
+    }
+
+    bool isEmpty() const { return count == 0; }
+    int getSize() const { return count; }
+
+    const Email& peekMax() const { return heapArray[0]; }
+
+    Email extractMax() {
+        Email topEmail = heapArray[0];
+        count--;
+        if (count > 0) {
+            heapArray[0] = heapArray[count];
+            siftDown(0);
+        }
+        return topEmail;
+    }
+};
+// ------------------------------------------------------- CEO Inboclass CEOInbox {
+class CEOInbox {
+private:
+    MaxHeap priorityQueue;
+    long sequenceCounter;
+
+public:
+    CEOInbox() : sequenceCounter(0) {}
+
+    void receiveEmail(const std::string& sender, const std::string& subject, const std::string& date) {
+        Email newEmail(sender, subject, date, sequenceCounter++);
+        priorityQueue.insert(newEmail);
+    }
+
+    void displayNextEmail() const {
+        if (priorityQueue.isEmpty()) {
+            std::cout << "No unread emails.\n";
+            return;
+        }
+
+	std::cout << "Next email:\n";
+        priorityQueue.peekMax().display();
+    }
+
+    void readCurrentEmail() {
+        if (priorityQueue.isEmpty()) {
+            std::cout << "No unread emails.\n";
+            return;
+        }
+        priorityQueue.extractMax();
+    }
+
+    void displayCount() const {
+        std::cout << "There are: " << priorityQueue.getSize()
+		  << " emails to read.\n";
+    }
+};
+
+// ------------------------------------------------------- String Utility Object
+class StringTokenizer {
+public:
+    static std::string trim(const std::string& s) {
+        size_t start = s.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos) return "";
+        size_t end = s.find_last_not_of(" \t\r\n");
+        return s.substr(start, end - start + 1);
+    }
+
+    static std::vector<std::string> splitByComma(const std::string& s) {
+        std::vector<std::string> parts;
+        std::string current;
+        std::stringstream ss(s);
+        while (std::getline(ss, current, ',')) {
+            parts.push_back(trim(current));
+        }
+        return parts;
+    }
+};
+
+// ------------------------------------------------------- Command Processor
+class CommandProcessor {
+private:
+    CEOInbox& inbox;
+
+public:
+    explicit CommandProcessor(CEOInbox& targetInbox) : inbox(targetInbox) {}
+
+    void processCommand(const std::string& rawLine) {
+        std::string line = StringTokenizer::trim(rawLine);
+        if (line.empty()) return;
+
+        if (line.compare(0, 6, "EMAIL ") == 0) {
+            std::vector<std::string> fields = StringTokenizer::splitByComma(line.substr(6));
+            if (fields.size() != 3) {
+                std::cerr << "Malformed EMAIL command: " << line << "\n";
+                return;
+            }
+            inbox.receiveEmail(fields[0], fields[1], fields[2]);
+        } else if (line == "NEXT") {
+            inbox.displayNextEmail();
+        } else if (line == "READ") {
+            inbox.readCurrentEmail();
+        } else if (line == "COUNT") {
+            inbox.displayCount();
+        } else {
+            std::cerr << "Unknown command: " << line << "\n";
+        }
+    }
+};
+
+// ------------------------------------------------------------------ main
+int main(int argc, char* argv[]) {
+    CEOInbox inbox;
+    CommandProcessor processor(inbox);
+
+    std::istream* inputStream = &std::cin;
+    std::ifstream fileStream;
+
+    if (argc > 1) {
+        fileStream.open(argv[1]);
+        if (!fileStream) {
+            std::cerr << "Cannot open file: " << argv[1] << "\n";
+            return 1;
+        }
+        inputStream = &fileStream;
+    }
+
+    std::string line;
+    while (std::getline(*inputStream, line)) {
+        processor.processCommand(line);
+    }
+
+    return 0;
+}
